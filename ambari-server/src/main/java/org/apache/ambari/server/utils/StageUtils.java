@@ -21,7 +21,6 @@ import static org.apache.ambari.server.agent.ExecutionCommand.KeyNames.AMBARI_JA
 import static org.apache.ambari.server.agent.ExecutionCommand.KeyNames.AMBARI_JAVA_VERSION;
 import static org.apache.ambari.server.agent.ExecutionCommand.KeyNames.AMBARI_JCE_NAME;
 import static org.apache.ambari.server.agent.ExecutionCommand.KeyNames.AMBARI_JDK_NAME;
-import static org.apache.ambari.server.agent.ExecutionCommand.KeyNames.JAVA_HOME;
 import static org.apache.ambari.server.agent.ExecutionCommand.KeyNames.JAVA_VERSION;
 import static org.apache.ambari.server.agent.ExecutionCommand.KeyNames.JCE_NAME;
 import static org.apache.ambari.server.agent.ExecutionCommand.KeyNames.JDK_NAME;
@@ -630,13 +629,13 @@ public class StageUtils {
    */
   public static void useStackJdkIfExists(Map<String, String> hostLevelParams, Configuration configuration) {
     // set defaults first
-    hostLevelParams.put(JAVA_HOME, configuration.getJavaHome());
+   // hostLevelParams.put(JAVA_HOME, configuration.getJavaHome());
     hostLevelParams.put(JDK_NAME, configuration.getJDKName());
     hostLevelParams.put(JCE_NAME, configuration.getJCEName());
     hostLevelParams.put(JAVA_VERSION, String.valueOf(configuration.getJavaVersion()));
     if (StringUtils.isNotEmpty(configuration.getStackJavaHome())
       && !configuration.getStackJavaHome().equals(configuration.getJavaHome())) {
-      hostLevelParams.put(JAVA_HOME, configuration.getStackJavaHome());
+     // hostLevelParams.put(JAVA_HOME, configuration.getStackJavaHome());
       if (StringUtils.isNotEmpty(configuration.getStackJavaVersion())) {
         hostLevelParams.put(JAVA_VERSION, configuration.getStackJavaVersion());
       }

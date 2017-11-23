@@ -378,6 +378,38 @@ describe('App.WizardStep3Controller', function () {
       expect(c.get('isSubmitDisabled')).to.equal(true);
     });
 
+    it('should remove java home prompt if no host of os_type exist', function () {
+      var hosts = [
+                   Em.Object.create({name: 'host1'}),
+                   Em.Object.create({name: 'host2'})
+                   ];
+      c.reopen({
+        hosts: hosts,
+        displayJavaHomePrompt: true
+      });
+      var javaHome = Em.A([{value: '',host_jdk_names :['host2'],host_jdk_context :['host2'],os_type : 'os1'}]);
+      c.set('javaHomeNewOs', javaHome);
+      var removeHosts = [{name: 'host2'}];
+      c.removeHosts(removeHosts).onPrimary();;
+      expect(c.get('displayJavaHomePrompt')).to.equal(false);
+    });
+
+    it('should not remove java home prompt if a host of os_type exist', function () {
+      var hosts = [
+                   Em.Object.create({name: 'host1'}),
+                   Em.Object.create({name: 'host2'}),
+                   Em.Object.create({name: 'host3'})
+                   ];
+      c.reopen({
+        hosts: hosts,
+        displayJavaHomePrompt : true,
+      });
+      var javaHome = Em.A([{value: '',host_jdk_names :['host2','host3'],host_jdk_context :['host2','host3'],os_type : 'os1'}]);
+      c.set('javaHomeNewOs', javaHome);
+      var removeHosts = [{name: 'host2'}];
+      c.removeHosts(removeHosts).onPrimary();;
+      expect(c.get('displayJavaHomePrompt')).to.equal(true);
+    });
   });
 
   describe('#removeSelectedHosts', function () {
@@ -487,6 +519,7 @@ describe('App.WizardStep3Controller', function () {
                 sshKey: 'key',
                 sshUser: 'root',
                 sshPort: '123',
+                javaHome: 'null',
                 agentUser: 'user'
               },
               hosts: { "host0": { "name": "host0" }, "host1": { "name": "host1" } }
@@ -507,6 +540,7 @@ describe('App.WizardStep3Controller', function () {
             hosts: ['host0', 'host1'],
             user: 'root',
             sshPort: '123',
+            javaHome: 'null',
             userRunAs: item.userRunAs
           }));
         });
@@ -2296,6 +2330,7 @@ describe('App.WizardStep3Controller', function () {
             sshKey: 'key',
             sshUser: 'root',
             sshPort: '123',
+            javaHome: 'null',
             agentUser: 'user'
           },
           hosts: { "host0": { "name": "host0" }, "host1": { "name": "host1" } },
@@ -2323,6 +2358,7 @@ describe('App.WizardStep3Controller', function () {
           hosts: ['host0', 'host1'],
           user: 'root',
           sshPort: '123',
+          javaHome: 'null',
           userRunAs: item.userRunAs
         }));
       });
@@ -2567,6 +2603,7 @@ describe('App.WizardStep3Controller', function () {
       var expected = {
           name: 'name',
           home: 'home',
+          ostypehome: 'ab',
           location: 'location'
         },
         data = {
@@ -2574,15 +2611,27 @@ describe('App.WizardStep3Controller', function () {
             properties: {
               'jdk.name': expected.name,
               'java.home': expected.home,
-              'jdk_location': expected.location
+              'jdk_location': expected.location,
+              'java.home.aa': expected.ostypehome
             }
           }
         };
+      var hostData = {
+          href: 'abc',
+          items: [
+                  {Hosts: {host_name: 'h1', os_type: 'aa'}}
+                  ]
+        };
+      c.set('jsonHostData', hostData);
 
       c.getJDKNameSuccessCallback(data);
       expect(c.get('needJDKCheckOnHosts')).to.equal(false);
       expect(c.get('jdkLocation')).to.equal(expected.location);
       expect(c.get('javaHome')).to.equal(expected.home);
+      var javaHomeProperty = c.get('javaHomePropertyList');
+      expect(javaHomeProperty.length).to.equal(1);
+      expect(javaHomeProperty[0].java_home_property).to.equal("ab");
+
     });
 
   });
@@ -2656,7 +2705,6 @@ describe('App.WizardStep3Controller', function () {
   });
 
   describe('#parseJDKCheckResults', function () {
-
     beforeEach(function () {
       sinon.stub(c, 'doCheckJDKsuccessCallback', Em.K);
     });
@@ -2675,14 +2723,17 @@ describe('App.WizardStep3Controller', function () {
     });
 
     it('should parse warnings (1)', function () {
-
       var data = {
-        Requests: {
-          end_time: 1
-        },
-        tasks: []
+          Requests: {
+            end_time: 1
+          },
+          tasks: []
       };
-
+      var javaHomeProp = Em.A([{os_type: 'aa', java_home_property: '/a/b'}]);
+      c.set('javaHomePropertyList', javaHomeProp);
+      c.reopen({
+        javaHomeNewOs: Em.A([{value: null,os_type: 'aa' }])
+      });
       c.set('jdkCategoryWarnings', {});
       c.parseJDKCheckResults(data);
       expect(c.get('jdkCategoryWarnings')).to.eql([]);
@@ -2690,43 +2741,254 @@ describe('App.WizardStep3Controller', function () {
     });
 
     it('should parse warnings (2)', function () {
-
       var data = {
-        Requests: {
-          end_time: 1
-        },
-        tasks: [
-          {
-            Tasks: {
-              host_name: 'h1',
-              structured_out: {
-                java_home_check: {
-                  exit_code: 1
-                }
-              }
-            }
+          Requests: {
+            end_time: 1
           },
-          {
-            Tasks: {
-              host_name: 'h2',
-              structured_out: {
-                java_home_check: {
-                  exit_code: 0
-                }
-              }
-            }
-          }
-        ]
+          tasks: [
+                  {
+                    Tasks: {
+                      host_name: 'h1',
+                      structured_out: {
+                        java_home_check: {
+                          exit_code: 1
+                        }
+                      }
+                    }
+                  },
+                  {
+                    Tasks: {
+                      host_name: 'h2',
+                      structured_out: {
+                        java_home_check: {
+                          exit_code: 0
+                        }
+                      }
+                    }
+                  }
+                  ]
       };
-
       c.set('jdkCategoryWarnings', {});
+      var hostData = {
+          href: 'abc',
+          items: [
+                  {Hosts: {host_name: 'h1', os_type: 'aa'}},
+                  {Hosts: {host_name: 'h2', os_type: 'ab'}}
+                  ]
+      };
+      c.set('jsonHostData', hostData);
+      var javaHomeProp = Em.A([{os_type: 'aa', java_home_property: '/a/b'}]);
+      c.set('javaHomePropertyList', javaHomeProp);
+      c.set('javaHomeNewOs', Em.A([]));
       c.parseJDKCheckResults(data);
       var result = c.get('jdkCategoryWarnings');
       expect(result.length).to.equal(1);
       expect(result[0].hostsNames).to.eql(['h1']);
-
     });
 
+    it('should display java home prompt if jdk warnings exist', function () {
+      var data = {
+          Requests: {
+            end_time: 1
+          },
+          tasks: [
+                  {
+                    Tasks: {
+                      host_name: 'h1',
+                      structured_out: {
+                        java_home_check: {
+                          exit_code: 1
+                        }
+                      }
+                    }
+                  },
+                  {
+                    Tasks: {
+                      host_name: 'h2',
+                      structured_out: {
+                        java_home_check: {
+                          exit_code: 0
+                        }
+                      }
+                    }
+                  }
+                  ]
+      };
+
+      c.set('javaHomeNewOs', Em.A([]));
+      var hostData = {
+          href: 'abc',
+          items: [
+                  {Hosts: {host_name: 'h1', os_type: 'aa'}},
+                  {Hosts: {host_name: 'h2', os_type: 'ab'}}
+                  ]
+      };
+      c.set('jsonHostData', hostData);
+      var javaHomeProp = Em.A([{os_type: 'aa', java_home_property: null}]);
+      c.set('javaHomePropertyList', javaHomeProp);
+      c.parseJDKCheckResults(data);
+      var javaHomeNewOsResult = c.get('javaHomeNewOs');
+      expect(javaHomeNewOsResult.length).to.equal(1);
+    });
+  });
+
+  describe('#invalidJavaPath', function () {
+    it('should return false if no path is present', function () {
+      var javaHome = Em.A([{value: ''}]);
+      c.set('javaHomeNewOs', javaHome);
+      expect(c.get('invalidJavaHomeUrlExists')).to.equal(false);
+    });
+    it('should return true if java home path contains white spaces', function () {
+      var javaHome = Em.A([{value: 'the java'}]);
+      c.set('javaHomeNewOs', javaHome);
+      expect(c.get('invalidJavaHomeUrlExists')).to.equal(true);
+    });
+    it('should return false if path is valid', function () {
+      var javaHome = Em.A([{value: '/this/java/path'}]);
+      c.set('javaHomeNewOs', javaHome);
+      expect(c.get('invalidJavaHomeUrlExists')).to.equal(false);
+    })
+  });
+
+  describe('#isJavaHomeSubmitDisabled', function () {
+    var cases = [
+                 {
+                   btnClickInProgress: true,
+                   invalidJavaHomeUrlExists: true,
+                   isEveryJavaHomeValueEmpty: true,
+                   isSubmitJavaButtonDisabled: true,
+                   description: 'case 1: submit disabled',
+                   title: 'submit button disabled'
+                 },
+                 {
+                   btnClickInProgress: true,
+                   invalidJavaHomeUrlExists: false,
+                   isEveryJavaHomeValueEmpty: true,
+                   isSubmitJavaButtonDisabled: true,
+                   description: 'case 2: submit disabled',
+                   title: 'submit button disabled'
+                 },
+                 {
+                   btnClickInProgress: false,
+                   invalidJavaHomeUrlExists: true,
+                   isEveryJavaHomeValueEmpty: true,
+                   isSubmitJavaButtonDisabled: true,
+                   description: 'case 3: submit disabled',
+                   title: 'submit button disabled'
+                 },
+                 {
+                   btnClickInProgress: false,
+                   invalidJavaHomeUrlExists: false,
+                   isEveryJavaHomeValueEmpty: true,
+                   isSubmitJavaButtonDisabled: true,
+                   description: 'case 4: submit disabled',
+                   title: 'submit button disabled'
+                 },
+                 {
+                   btnClickInProgress: false,
+                   invalidJavaHomeUrlExists: false,
+                   isEveryJavaHomeValueEmpty: false,
+                   isSubmitJavaButtonDisabled: false,
+                   description: 'case 5: submit not disabled',
+                   title: 'submit button enabled'
+                 }
+                 ];
+
+    cases.forEach(function (item) {
+      describe(item.description, function () {
+        beforeEach(function () {
+          c.reopen({
+            invalidJavaHomeUrlExists: item.invalidJavaHomeUrlExists,
+            isEveryJavaHomeValueEmpty : item.isEveryJavaHomeValueEmpty
+          });
+          sinon.stub(App, 'get').withArgs('router.btnClickInProgress').returns(item.btnClickInProgress);
+        });
+
+        afterEach(function () {
+          App.get.restore();
+        });
+
+        it(item.title, function () {
+          expect(c.get('isJavaHomeSubmitDisabled')).to.equal(item.isSubmitJavaButtonDisabled);
+        });
+      });
+    });
+  });
+
+  describe('#displayJavaHomePanel', function () {
+    beforeEach(function () {
+      var javaHome = Em.A([{value: '', os_type: 'aa'}]);
+      c.set('javaHomeNewOs', javaHome);
+      c.set('displayJavaHomePrompt',false);
+    });
+    it('should not display the java home prompt if the property is already set', function () {
+      var javaHomeProp = Em.A([{os_type: 'aa', java_home_property: '/a/b'}]);
+      c.set('javaHomePropertyList', javaHomeProp);
+      c.displayJavaHomePanel();
+      expect(c.get('displayJavaHomePrompt')).to.equal(false);
+    });
+    it('should  display the java home prompt if the property is not set', function () {
+      var javaHomeProp = Em.A([{os_type: 'aa', java_home_property: null}]);
+      c.set('javaHomePropertyList', javaHomeProp);
+      c.displayJavaHomePanel();
+      expect(c.get('displayJavaHomePrompt')).to.equal(true);
+    });
+
+  });
+  describe('#submitJavaHome', function () {
+    var cases = [
+                 {
+                   customizeAgentUserAccount: true,
+                   userRunAs: 'user',
+                   title: 'Ambari Agent user account customize enabled'
+                 },
+                 {
+                   customizeAgentUserAccount: false,
+                   userRunAs: 'root',
+                   title: 'Ambari Agent user account customize disabled'
+                 }
+                 ],
+                 controller = App.WizardStep3Controller.create({
+                   content: {
+                     installOptions: {
+                       sshKey: 'key',
+                       sshUser: 'root',
+                       sshPort: '123',
+                       agentUser: 'user'
+                     },
+                     hosts: { "host0": { "name": "host0" }, "host1": { "name": "host1" } },
+                     controllerName: 'installerController',
+                   }
+                 });
+
+    beforeEach(function () {
+      sinon.stub(App.router.get('installerController'), 'launchBootstrap', Em.K);
+      this.mock = sinon.stub(App, 'get');
+    });
+
+    afterEach(function () {
+      App.router.get('installerController').launchBootstrap.restore();
+      this.mock.restore();
+    });
+
+    cases.forEach(function (item) {
+      it(item.title, function () {
+        this.mock.withArgs('supports.customizeAgentUserAccount').returns(item.customizeAgentUserAccount);
+        var javaHome = Em.A([{value: '/aa', host_jdk_names: ['host0','host1']}]);
+        controller.set('javaHomeNewOs', javaHome);
+        controller.submitJavaHome();
+        var expectedJavaHome = Em.A([{host_jdk_names: ['host0','host1'],value: '/aa',validation:'',invalidFormatError:false}]);
+        expect(App.router.get('installerController.launchBootstrap').firstCall.args[0]).to.equal(JSON.stringify({
+          verbose: true,
+          sshKey: 'key',
+          hosts: ['host0', 'host1'],
+          user: 'root',
+          sshPort: '123',
+          userRunAs: item.userRunAs,
+          javaHome: "[{\"host_jdk_names\":[\"host0\",\"host1\"],\"value\":\"/aa\",\"validation\":\"\",\"invalidFormatError\":false}]"
+        }));
+      });
+    });
   });
 
   describe('#getHostCheckTasksSuccess', function() {

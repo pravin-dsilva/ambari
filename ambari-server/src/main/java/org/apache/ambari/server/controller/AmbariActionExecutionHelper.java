@@ -22,6 +22,7 @@ import static org.apache.ambari.server.agent.ExecutionCommand.KeyNames.AGENT_STA
 import static org.apache.ambari.server.agent.ExecutionCommand.KeyNames.AGENT_STACK_RETRY_ON_UNAVAILABILITY;
 import static org.apache.ambari.server.agent.ExecutionCommand.KeyNames.COMMAND_TIMEOUT;
 import static org.apache.ambari.server.agent.ExecutionCommand.KeyNames.COMPONENT_CATEGORY;
+import static org.apache.ambari.server.agent.ExecutionCommand.KeyNames.JAVA_HOME;
 import static org.apache.ambari.server.agent.ExecutionCommand.KeyNames.REPO_INFO;
 import static org.apache.ambari.server.agent.ExecutionCommand.KeyNames.SCRIPT;
 import static org.apache.ambari.server.agent.ExecutionCommand.KeyNames.SCRIPT_TYPE;
@@ -454,6 +455,18 @@ public class AmbariActionExecutionHelper {
         resourceFilter.getComponentName() : componentName);
 
       Map<String, String> hostLevelParams = execCmd.getHostLevelParams();
+
+      String javaHomeKey = "java.home." + clusters.getHost(hostName).getOsType();
+      String javaHomeValue = configs.getPropertyForced(javaHomeKey);
+      LOG.info("javaHomeKey:" + javaHomeKey + "  javaHomeValue:"+  javaHomeValue+  " in AmbariActionExecutionHelper");
+      if (javaHomeValue != null) {
+        commandParams.put(JAVA_HOME, javaHomeValue);
+        hostLevelParams.put(JAVA_HOME, javaHomeValue);
+      } else {
+        commandParams.put(JAVA_HOME, configs.getJavaHome());
+        hostLevelParams.put(JAVA_HOME, configs.getJavaHome());
+      }
+
       hostLevelParams.put(AGENT_STACK_RETRY_ON_UNAVAILABILITY, configs.isAgentStackRetryOnInstallEnabled());
       hostLevelParams.put(AGENT_STACK_RETRY_COUNT, configs.getAgentStackRetryOnInstallCount());
       for (Map.Entry<String, String> dbConnectorName : configs.getDatabaseConnectorNames().entrySet()) {

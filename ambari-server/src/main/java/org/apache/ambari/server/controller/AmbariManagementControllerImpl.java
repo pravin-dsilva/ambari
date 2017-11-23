@@ -28,6 +28,7 @@ import static org.apache.ambari.server.agent.ExecutionCommand.KeyNames.COMMAND_T
 import static org.apache.ambari.server.agent.ExecutionCommand.KeyNames.CUSTOM_FOLDER;
 import static org.apache.ambari.server.agent.ExecutionCommand.KeyNames.DB_DRIVER_FILENAME;
 import static org.apache.ambari.server.agent.ExecutionCommand.KeyNames.GROUP_LIST;
+import static org.apache.ambari.server.agent.ExecutionCommand.KeyNames.JAVA_HOME;
 import static org.apache.ambari.server.agent.ExecutionCommand.KeyNames.MAX_DURATION_OF_RETRIES;
 import static org.apache.ambari.server.agent.ExecutionCommand.KeyNames.NOT_MANAGED_HDFS_PATH_LIST;
 import static org.apache.ambari.server.agent.ExecutionCommand.KeyNames.PACKAGE_LIST;
@@ -2544,7 +2545,15 @@ public class AmbariManagementControllerImpl implements AmbariManagementControlle
 
     // Set/update the unlimited_key_jce_required value as needed
     hostParams.put(UNLIMITED_KEY_JCE_REQUIRED, (unlimitedKeyJCEPolicyRequired) ? "true" : "false");
-
+    String javaHomeKey = "java.home." + cluster.getHost(hostname).getOsType();
+    String javaHomeValue = configs.getPropertyForced(javaHomeKey);
+    LOG.info("javaHomeKey:" + javaHomeKey+  "  javaHomeValue:" + javaHomeValue+  " in AmbariManagementControllerImpl");
+    //String javaHomeValue = configs.getPropertyForced("java.home.redhat-ppc7");
+    if (javaHomeValue != null) {
+      hostParams.put(JAVA_HOME, javaHomeValue);
+    } else {
+      hostParams.put(JAVA_HOME, configs.getJavaHome());
+    }
     execCmd.setHostLevelParams(hostParams);
 
     Map<String, String> roleParams = new TreeMap<>();

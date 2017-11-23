@@ -57,6 +57,10 @@ public class SshHostInfo {
   @XmlElement
   private String userRunAs;
 
+  @XmlElement
+  private String javaHome;
+
+
   public String getSshKey() {
     return sshKey;
   }
@@ -118,5 +122,12 @@ public class SshHostInfo {
       ret.append(host).append(":");
     }
     return ret.toString();
+  }
+  public String getJavaHome() {
+    return javaHome;
+  }
+
+  public void setJavaHome(String javaHome) {
+    this.javaHome = javaHome;
   }
 }

@@ -61,7 +61,6 @@ class BSRunner extends Thread {
   private final String clusterOsFamily;
   private String projectVersion;
   private int serverPort;
-
   public BSRunner(BootStrapImpl impl, SshHostInfo sshHostInfo, String bootDir,
       String bsScript, String agentSetupScript, String agentSetupPassword,
       int requestId, long timeout, String hostName, boolean isVerbose, String clusterOsFamily,
@@ -202,7 +201,7 @@ class BSRunner extends Thread {
        sshPort = DEFAULT_SSHPORT;
     }
 
-    String command[] = new String[13];
+    String command[] = new String[14];
     BSStat stat = BSStat.RUNNING;
     String scriptlog = "";
     try {
@@ -242,6 +241,7 @@ class BSRunner extends Thread {
       command[10] = this.serverPort+"";
       command[11] = userRunAs;
       command[12] = (this.passwordFile==null) ? "null" : this.passwordFile.toString();
+      command[13] = this.sshHostInfo.getJavaHome();
 
       Map<String, String> envVariables = new HashMap<>();
 

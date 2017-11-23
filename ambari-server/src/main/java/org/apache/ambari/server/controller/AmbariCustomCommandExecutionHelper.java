@@ -28,6 +28,7 @@ import static org.apache.ambari.server.agent.ExecutionCommand.KeyNames.DB_DRIVER
 import static org.apache.ambari.server.agent.ExecutionCommand.KeyNames.DB_NAME;
 import static org.apache.ambari.server.agent.ExecutionCommand.KeyNames.GROUP_LIST;
 import static org.apache.ambari.server.agent.ExecutionCommand.KeyNames.HOST_SYS_PREPPED;
+import static org.apache.ambari.server.agent.ExecutionCommand.KeyNames.JAVA_HOME;
 import static org.apache.ambari.server.agent.ExecutionCommand.KeyNames.JDK_LOCATION;
 import static org.apache.ambari.server.agent.ExecutionCommand.KeyNames.MYSQL_JDBC_URL;
 import static org.apache.ambari.server.agent.ExecutionCommand.KeyNames.NOT_MANAGED_HDFS_PATH_LIST;
@@ -437,6 +438,16 @@ public class AmbariCustomCommandExecutionHelper {
       Set<String> notManagedHdfsPathSet = configHelper.filterInvalidPropertyValues(notManagedHdfsPathMap, NOT_MANAGED_HDFS_PATH_LIST);
       String notManagedHdfsPathList = gson.toJson(notManagedHdfsPathSet);
       hostLevelParams.put(NOT_MANAGED_HDFS_PATH_LIST, notManagedHdfsPathList);
+      String javaHomeKey = "java.home."+ host.getOsType();
+      String javaHomeValue = configs.getPropertyForced(javaHomeKey);
+      LOG.info("javaHomeKey:" + javaHomeKey + "  javaHomeValue:"+  javaHomeValue+  " in AmbariCustomCommandExecutionHelper in hostLevelParam");
+      if (javaHomeValue != null) {
+        hostLevelParams.put(JAVA_HOME, javaHomeValue);
+
+      } else {
+        hostLevelParams.put(JAVA_HOME, configs.getJavaHome());
+      }
+
 
       execCmd.setHostLevelParams(hostLevelParams);
 
@@ -746,7 +757,17 @@ public class AmbariCustomCommandExecutionHelper {
 
     ExecutionCommand execCmd = stage.getExecutionCommandWrapper(hostname,
         smokeTestRole).getExecutionCommand();
+    Map<String, String> hostParams = new TreeMap<>();
+    String javaHomeKey = "java.home." + cluster.getHost(hostname).getOsType();
+    String javaHomeValue = configs.getPropertyForced(javaHomeKey);
+    LOG.info("javaHomeKey:" + javaHomeKey + "  javaHomeValue:"+  javaHomeValue + " in AmbariCustomCommandExecutionHelper");
+    if (javaHomeValue != null) {
+      hostParams.put(JAVA_HOME, javaHomeValue);
+    } else {
+      hostParams.put(JAVA_HOME, configs.getJavaHome());
+    }
 
+       execCmd.setHostLevelParams(hostParams);
     // if the command should fetch brand new configuration tags before
     // execution, then we don't need to fetch them now
     if(actionParameters != null && actionParameters.containsKey(KeyNames.REFRESH_CONFIG_TAGS_BEFORE_EXECUTION)){

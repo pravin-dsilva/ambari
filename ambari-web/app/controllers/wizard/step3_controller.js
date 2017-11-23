@@ -184,6 +184,9 @@ App.WizardStep3Controller = Em.Controller.extend(App.ReloadPopupMixin, App.Check
     this.set('isLoaded', false);
     this.set('isSubmitDisabled', true);
     this.set('stopChecking', false);
+    this.set('displayJavaHomeError',false);
+    this.set('displayJavaHomePrompt',false);
+    this.set('javaHomeNewOsTmp', Em.A([]));
   },
 
   /**
@@ -198,6 +201,7 @@ App.WizardStep3Controller = Em.Controller.extend(App.ReloadPopupMixin, App.Check
         'hosts': this.getBootstrapHosts(),
         'user': this.get('content.installOptions.sshUser'),
         'sshPort': this.get('content.installOptions.sshPort'),
+        'javaHome' : "null",
         'userRunAs': App.get('supports.customizeAgentUserAccount') ? this.get('content.installOptions.agentUser') : 'root'
     });
     App.router.get(this.get('content.controllerName')).launchBootstrap(bootStrapData, function (requestId) {
@@ -301,6 +305,23 @@ App.WizardStep3Controller = Em.Controller.extend(App.ReloadPopupMixin, App.Check
     return App.showConfirmationPopup(function () {
       App.router.send('removeHosts', hosts);
       self.hosts.removeObjects(hosts);
+      hosts.forEach(function(_host) {
+        var javaHomeOsTypeIndex = -1;
+        self.javaHomeNewOs.some(function(os, index) {
+          javaHomeOsTypeIndex = index;
+          return true;
+        });
+        if (javaHomeOsTypeIndex != -1) {
+          self.javaHomeNewOs[javaHomeOsTypeIndex].host_jdk_names.removeObject(_host.name);
+          self.javaHomeNewOs[javaHomeOsTypeIndex].host_jdk_context.removeObject(_host.name);
+          if (self.javaHomeNewOs[javaHomeOsTypeIndex].host_jdk_names.length == 0) {
+            self.javaHomeNewOs.removeAt(javaHomeOsTypeIndex);
+          }
+          if (!self.javaHomeNewOs.length) {
+            self.set('displayJavaHomePrompt', false);
+          }
+        }
+      });
       self.stopRegistration();
       if (!self.hosts.length) {
         self.set('isSubmitDisabled', true);
@@ -372,12 +393,14 @@ App.WizardStep3Controller = Em.Controller.extend(App.ReloadPopupMixin, App.Check
    */
   retryHosts: function (hosts) {
     var self = this;
+    this.set('displayJavaHomePrompt', false);
     var bootStrapData = JSON.stringify({
         'verbose': true,
         'sshKey': this.get('content.installOptions.sshKey'),
         'hosts': hosts.mapProperty('name'),
         'user': this.get('content.installOptions.sshUser'),
         'sshPort': this.get('content.installOptions.sshPort'),
+        'javaHome' : "null",
         'userRunAs': App.get('supports.customizeAgentUserAccount') ? this.get('content.installOptions.agentUser') : 'root'
       });
     this.set('numPolls', 0);
@@ -702,12 +725,22 @@ App.WizardStep3Controller = Em.Controller.extend(App.ReloadPopupMixin, App.Check
    * @return {$.ajax}
    * @method getJDKName
    */
-  getJDKName: function () {
+  getJDKName: function getJDKName() {
+    var osTypeJDKHomeField = "";
+    var tmpPath;
+    this.jsonHostData.items.forEach(function (os) {
+      if(osTypeJDKHomeField.indexOf(os.Hosts.os_type) == -1) {
+        tmpPath= "RootServiceComponents/properties/java.home."+os.Hosts.os_type+",";
+        osTypeJDKHomeField = osTypeJDKHomeField.concat(tmpPath);
+      }
+    },this);
+
+    var field =  "?fields="+osTypeJDKHomeField+"RootServiceComponents/properties/jdk.name,RootServiceComponents/properties/java.home,RootServiceComponents/properties/jdk_location"
     return App.ajax.send({
       name: 'ambari.service',
       sender: this,
       data: {
-        fields : '?fields=RootServiceComponents/properties/jdk.name,RootServiceComponents/properties/java.home,RootServiceComponents/properties/jdk_location'
+        fields : field
       },
       success: 'getJDKNameSuccessCallback'
     });
@@ -719,9 +752,24 @@ App.WizardStep3Controller = Em.Controller.extend(App.ReloadPopupMixin, App.Check
     * @method getJDKNameSuccessCallback
     */
   getJDKNameSuccessCallback: function (data) {
+    var javaHomePropertyList = Em.A([]);
+    var javaHomePropertyList_tmp = Em.A([]);
     this.set('needJDKCheckOnHosts', !data.RootServiceComponents.properties["jdk.name"]);
     this.set('jdkLocation', Em.get(data, "RootServiceComponents.properties.jdk_location"));
     this.set('javaHome', data.RootServiceComponents.properties["java.home"]);
+    this.jsonHostData.items.forEach(function (os) {
+      var valueExists = javaHomePropertyList.some(function (osType){
+        return osType.os_type == os.Hosts.os_type
+      });
+      if(!valueExists){
+        javaHomePropertyList_tmp = {
+          "os_type": os.Hosts.os_type,
+          "java_home_property": data.RootServiceComponents.properties["java.home." + os.Hosts.os_type]
+        };
+        javaHomePropertyList.pushObject(javaHomePropertyList_tmp);
+      }
+      }, this);
+    this.set('javaHomePropertyList',javaHomePropertyList);
   },
 
   doCheckJDK: function () {
@@ -762,34 +810,209 @@ App.WizardStep3Controller = Em.Controller.extend(App.ReloadPopupMixin, App.Check
   doCheckJDKerrorCallback: function () {
     this.set('isJDKWarningsLoaded', true);
   },
+
   parseJDKCheckResults: function (data) {
+    var invalidJavaHomeName;
+    var javaHomeNewOs_tmp = Em.A([]);
+    var javaHomeNewOs = Em.A([]);
     var jdkWarnings = [], hostsJDKContext = [], hostsJDKNames = [];
     // check if the request ended
     if (data.Requests.end_time > 0 && data.tasks) {
       data.tasks.forEach( function(task) {
         // generate warning context
-        if (Em.get(task, "Tasks.structured_out.java_home_check.exit_code") == 1){
+        if (Em.get(task, "Tasks.structured_out.java_home_check.exit_code") == 1) {
+          var warnedHost = this.jsonHostData.items.findProperty('Hosts.host_name', task.Tasks.host_name);
           var jdkContext = Em.I18n.t('installer.step3.hostWarningsPopup.jdk.context').format(task.Tasks.host_name);
           hostsJDKContext.push(jdkContext);
           hostsJDKNames.push(task.Tasks.host_name);
+          var jdkIndex = -1;
+          javaHomeNewOs.some(function(os, index) {
+            if(os.os_type.contains(warnedHost.Hosts.os_type)) {
+              jdkIndex =  index;
+              return true
+            }
+          });
+            if(jdkIndex == -1) {
+              javaHomeNewOs_tmp = {
+                  "os_type": warnedHost.Hosts.os_type,
+                  "host_jdk_names" : [],
+                  "host_jdk_context" : []
+              };
+              javaHomeNewOs_tmp.host_jdk_names.push(task.Tasks.host_name);
+              javaHomeNewOs_tmp.host_jdk_context.push(jdkContext);
+              javaHomeNewOs.pushObject(javaHomeNewOs_tmp);
+            }
+            else {
+              javaHomeNewOs[jdkIndex].host_jdk_names.push(task.Tasks.host_name);
+              javaHomeNewOs[jdkIndex].host_jdk_context.push(jdkContext);
+            }
+            this.set('javaHomeNewOs', javaHomeNewOs);
         }
-      });
-      if (hostsJDKContext.length > 0) { // java jdk warning exist
-        var invalidJavaHome = this.get('javaHome');
-        jdkWarnings.push({
-          name: Em.I18n.t('installer.step3.hostWarningsPopup.jdk.name').format(invalidJavaHome),
-          hosts: hostsJDKContext,
-          hostsLong: hostsJDKContext,
-          hostsNames: hostsJDKNames,
-          category: 'jdk'
-        });
-      }
-      this.set('jdkCategoryWarnings', jdkWarnings);
-    } else {
+      }, this);
+          if (hostsJDKContext.length > 0) { // java jdk warning exist
+            //var invalidJavaHome = this.get('javaHome');
+            this.set('hostsJDKNames',hostsJDKNames);
+            this.get('javaHomeNewOs').forEach(function(os) {
+              var invalidJavaHome= this.javaHomePropertyList.findProperty('os_type',os.os_type).java_home_property;
+              if(!invalidJavaHome){
+                invalidJavaHomeName = Em.I18n.t('installer.step3.hostWarningsPopup.jdk.name.empty').format(os.os_type);
+              }
+              else{
+                invalidJavaHomeName = Em.I18n.t('installer.step3.hostWarningsPopup.jdk.name').format(invalidJavaHome);
+              }
+              jdkWarnings.push({
+                name: invalidJavaHomeName,
+                hosts: os.host_jdk_context,
+                hostsLong: os.host_jdk_context,
+                hostsNames: os.host_jdk_names,
+                category: 'jdk'
+              });
+            },this);
+            this.displayJavaHomePanel(); //if the java home property is not set, provide a prompt for user to set it
+          }
+          this.set('jdkCategoryWarnings', jdkWarnings);
+    }
+    else {
       // still doing JDK check, data not ready to be parsed
       this.set('jdkCategoryWarnings', null);
     }
     this.doCheckJDKsuccessCallback();
+  },
+
+  displayJavaHomePanel: function() {
+    this.javaHomePropertyList.forEach(function(prop) {
+      var jdkIndex = -1;
+      if(prop.java_home_property) {
+        this.javaHomeNewOs.some(function(os, index) {
+          if(os.os_type.contains(prop.os_type)) {
+            jdkIndex = index;
+            return true;
+          }
+        });
+        if(jdkIndex != -1 ){
+          this.javaHomeNewOs.removeAt(jdkIndex);
+        }
+      }
+    },this);
+    if(this.javaHomeNewOs.length) {
+      this.set('displayJavaHomePrompt', true);
+    }
+    //Notify user if java home property could not be set
+    if (this.javaHomeNewOsTmp) {
+      this.javaHomeNewOsTmp.forEach(function (osTypes) {
+        var errIndex = -1;
+        this.javaHomeNewOs.some(function (os, index) {
+          if (os.os_type.contains(osTypes.os_type)) {
+            errIndex = index;
+            return true;
+          }
+        });
+       if (errIndex != -1) {
+           this.set('displayJavaHomeError', true);
+          }
+      },this);
+    }
+  },
+
+  /**
+   * Observer for java home input
+   */
+  editJavaHomeNewOs: function () {
+    var regex = /^\/$|^\/\S$|(^(?=\/\S)|^\.|^\.\.)(\/(?=[^/\0])[^/\0][\S]+)*\/*[\S]?$/;
+    this.javaHomeNewOs.forEach(function (javaHome) {
+      if (javaHome.value == '' || javaHome.value == null) {
+        Em.set(javaHome, 'validation', "");
+        Em.set(javaHome, 'invalidFormatError', false);
+      } else if (!regex.test(javaHome.value)) {
+        Em.set(javaHome, 'validation', Em.I18n.t('installer.step3.javaHome.validation.error'));
+        Em.set(javaHome, 'invalidFormatError', true);
+      } else {
+        Em.set(javaHome, 'validation', "");
+        Em.set(javaHome, 'invalidFormatError', false);
+      }
+    }, this);
+  }.observes('javaHomeNewOs.@each.value'),
+
+  /**
+   * @type {boolean}
+   */
+  invalidJavaHomeUrlExists: function () {
+    if (!this.javaHomeNewOs) {
+      return false;
+    }
+    return this.javaHomeNewOs.someProperty('invalidFormatError', true);
+  }.property('javaHomeNewOs.@each.invalidFormatError'),
+
+  /**
+   * @type {boolean}
+   */
+  isEveryJavaHomeValueEmpty : function() {
+      return this.javaHomeNewOs.getEach('value').every(function(value) {
+        return value == null || value == "";
+    });
+  }.property('javaHomeNewOs.@each.value'),
+
+  /**
+   * @type {boolean}
+   */
+  isJavaHomeSubmitDisabled: Em.computed.or('invalidJavaHomeUrlExists', 'App.router.btnClickInProgress','isEveryJavaHomeValueEmpty'),
+
+  /**
+   * This will call boostrap api to validate and set java home property
+   */
+  submitJavaHome: function(){
+    var self = this;
+    var warnedHosts = [];
+    var javaHomeForBootstrap = Em.A([]);
+    this.set('displayJavaHomeError',false);
+    this.set('displayJavaHomePrompt',false);
+    this.get('javaHomeNewOs').forEach(function(os) {
+      if(os.value){
+        os.host_jdk_names.forEach(function (jdkName){
+          warnedHosts.push(jdkName); //Bootstrap only those hosts which have a valid java home path
+       },this);
+      }
+      else {
+        this.javaHomeNewOs.removeObject(os);
+      }
+   },this);
+    this.set('javaHomeNewOsTmp', this.get('javaHomeNewOs'));
+    var bootStrapData = JSON.stringify({
+      'verbose': true,
+      'sshKey': this.get('content.installOptions.sshKey'),
+      'hosts': warnedHosts,
+      'user': this.get('content.installOptions.sshUser'),
+      'sshPort': this.get('content.installOptions.sshPort'),
+      'userRunAs': App.get('supports.customizeAgentUserAccount') ? this.get('content.installOptions.agentUser') : 'root',
+      'javaHome': JSON.stringify(this.get('javaHomeNewOs'))
+    });
+    this.set('numPolls', 0);
+    this.set('registrationStartedAt', null);
+    this.set('isHostsWarningsLoaded', false);
+    this.set('stopChecking', false);
+    this.set('isSubmitDisabled', true);
+    var selectedHosts = this.get('bootHosts');
+    selectedHosts.forEach(function (_host) {
+      var bootHostName = _host.get('name');
+      for (var i = 0; i < warnedHosts.length; i++) {
+        if (warnedHosts[i] == bootHostName) {
+          _host.set('bootStatus', 'DONE');
+          _host.set('bootLog', 'Retrying ...');
+        }
+      }
+    }, this);
+
+    App.router.get(this.get('content.controllerName'))
+    .launchBootstrap(bootStrapData, function(requestId) {
+      if (requestId == '0') {
+        self.startBootstrap();
+      } else if (requestId) {
+        self.set('content.installOptions.bootRequestId', requestId);
+        App.router.get(self.get('content.controllerName'))
+        .save('installOptions');
+        self.startBootstrap();
+      }
+      });
   },
 
   /**
@@ -815,11 +1038,40 @@ App.WizardStep3Controller = Em.Controller.extend(App.ReloadPopupMixin, App.Check
     if (!hosts.everyProperty('bootStatus', 'FAILED')) {
       this.set('isWarningsLoaded', false);
       this.getHostNameResolution();
-      this.checkHostJDK();
+      var self = this;
+      this.getHostOsInfo().done(function(){
+        self.checkHostJDK();
+      },self);
     } else {
       this.stopHostCheck();
     }
   },
+
+  getHostOsInfo : function() {
+    this.set('isHostsWarningsLoaded', false);
+    var dfd = $.Deferred();
+    App.ajax.send({
+      name : 'wizard.step3.host_info',
+      sender : this,
+      data : {
+        dfd : dfd
+      },
+      success : 'hostOsInfoSuccessCallback',
+      error : 'hostOsInfoErrorCallback'
+    });
+    return dfd.promise();
+  },
+
+  hostOsInfoSuccessCallback : function(data, opt, params) {
+    this.jsonHostData = data;
+    params.dfd.resolve();
+  },
+
+  hostOsInfoErrorCallback : function(request, ajaxOptions, error, opt, params) {
+    console.log("Error in getting host info");
+    params.dfd.reject();
+  },
+
 
   _submitProceed: function () {
     this.set('confirmedHosts', this.get('bootHosts'));
