@@ -3045,6 +3045,18 @@ public class Configuration {
     return properties.getProperty(key);
   }
 
+  public String getPropertyForced(String key) {
+    String returnValue = properties.getProperty(key);
+    if (returnValue == null) {
+      Properties properties = readConfigFile();
+      returnValue = properties.getProperty(key);
+      if (returnValue != null) {
+        this.properties = properties;
+      }
+    }
+    return returnValue;
+  }
+
   /**
    * Gets a copy of all of the configuration properties that back this
    * {@link Configuration} instance.

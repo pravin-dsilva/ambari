@@ -872,6 +872,12 @@ Em.I18n.translations = {
   'installer.step3.hostLogPopup.copy':'press CTRL+C',
   'installer.step3.hostsTable.selectAll':'Select All Hosts',
   'installer.step3.selectedHosts.popup.header':'Selected Hosts',
+  'installer.step3.javaHome.title':'Java Home',
+  'installer.step3.javaHome.description':'Please enter a valid Java Home path for the following operating systems',
+  'installer.step3.javaHome.osType':'Os',
+  'installer.step3.javaHome.name':'Java Home',
+  'installer.step3.javaHome.validation.error':'Please enter a valid file path',
+  'installer.step3.javaHome.property.error':'Java home property could not be set for one or more operating systems. Please enter a valid Java home path and try again',
 
   'installer.step4.header':'Choose Services',
   'installer.step4.body':'Choose which services you want to install on your cluster.',
