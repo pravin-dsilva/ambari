@@ -358,6 +358,7 @@ describe('App.WizardStep3Controller', function () {
 
     beforeEach(function () {
       sinon.spy(App, 'showConfirmationPopup');
+      sinon.stub(c, 'removeHostFromPrompt');
     });
 
     afterEach(function () {
@@ -377,7 +378,19 @@ describe('App.WizardStep3Controller', function () {
       c.removeHosts(hosts).onPrimary();
       expect(c.get('isSubmitDisabled')).to.equal(true);
     });
+  });
 
+  describe('#removeHostFromPrompt', function () {
+    it('should remove index if no hosts are present', function () {
+    c.reopen({
+      displayJavaHomePrompt : true,
+    });
+    var javaHome = Em.A([{value: '',hosts :['host2'] ,os_type : 'os1'}]);
+    c.set('javaHomeNewOs', javaHome);
+    host = 'host2';
+    c.removeHostFromPrompt(c.get('javaHomeNewOs'), host);
+    expect(c.get('javaHomeNewOs').length).to.equal(0);
+    });
   });
 
   describe('#removeSelectedHosts', function () {
@@ -2567,6 +2580,7 @@ describe('App.WizardStep3Controller', function () {
       var expected = {
           name: 'name',
           home: 'home',
+          ostypehome: 'ab',
           location: 'location'
         },
         data = {
@@ -2574,15 +2588,24 @@ describe('App.WizardStep3Controller', function () {
             properties: {
               'jdk.name': expected.name,
               'java.home': expected.home,
-              'jdk_location': expected.location
+              'jdk_location': expected.location,
+              'java.home.aa': expected.ostypehome
             }
           }
         };
-
+      var hostData = {
+          href: 'abc',
+          items: [
+                  {Hosts: {host_name: 'h1', os_type: 'aa'}}
+                  ]
+      };
+      c.set('jsonHostData', hostData);
       c.getJDKNameSuccessCallback(data);
       expect(c.get('needJDKCheckOnHosts')).to.equal(false);
       expect(c.get('jdkLocation')).to.equal(expected.location);
       expect(c.get('javaHome')).to.equal(expected.home);
+      var javaHomePathList = c.get('javaHomePathList');
+      expect(javaHomePathList['aa']).to.equal('ab');
     });
 
   });
@@ -2718,7 +2741,18 @@ describe('App.WizardStep3Controller', function () {
           }
         ]
       };
-
+      var hostData = {
+          href: 'abc',
+          items: [
+                  {Hosts: {host_name: 'h1', os_type: 'aa'}},
+                  {Hosts: {host_name: 'h2', os_type: 'ab'}}
+                  ]
+      };
+      c.set('jsonHostData', hostData);
+      var javaHomeProp = {};
+      javaHomeProp['aa'] = '/a/b';
+      c.set('javaHomePathList', javaHomeProp);
+      c.set('javaHomeNewOs', Em.A([]));
       c.set('jdkCategoryWarnings', {});
       c.parseJDKCheckResults(data);
       var result = c.get('jdkCategoryWarnings');
@@ -2727,7 +2761,101 @@ describe('App.WizardStep3Controller', function () {
 
     });
 
+    it('should display java home prompt if jdk warnings exist', function () {
+      var data = {
+          Requests: {
+            end_time: 1
+          },
+          tasks: [
+                  {
+                    Tasks: {
+                      host_name: 'h1',
+                      structured_out: {
+                        java_home_check: {
+                          exit_code: 1
+                        }
+                      }
+                    }
+                  },
+                  {
+                    Tasks: {
+                      host_name: 'h2',
+                      structured_out: {
+                        java_home_check: {
+                          exit_code: 0
+                        }
+                      }
+                    }
+                  }
+                  ]
+      };
+
+      c.set('javaHomeNewOs', Em.A([]));
+      var hostData = {
+          href: 'abc',
+          items: [
+                  {Hosts: {host_name: 'h1', os_type: 'aa'}},
+                  {Hosts: {host_name: 'h2', os_type: 'ab'}}
+                  ]
+      };
+      c.set('jsonHostData', hostData);
+      var javaHomeProp = {};
+      javaHomeProp['aa'] = null;
+      c.set('javaHomePathList', javaHomeProp);
+      c.parseJDKCheckResults(data);
+      var javaHomeNewOsResult = c.get('javaHomeNewOs');
+      expect(javaHomeNewOsResult.length).to.equal(1);
+    });
   });
+
+  describe('#displayJavaHomePanel', function () {
+    beforeEach(function () {
+      var javaHome = Em.A([{value: '', os_type: 'aa'}]);
+      c.set('javaHomeNewOs', javaHome);
+      c.set('displayJavaHomePrompt',false);
+    });
+    it('should not display the java home prompt if the property is already set', function () {
+      var javaHomeProp = {};
+      javaHomeProp['aa'] = '/a/b';
+      c.set('javaHomePathList', javaHomeProp);
+      c.displayJavaHomePanel();
+      expect(c.get('displayJavaHomePrompt')).to.equal(false);
+    });
+    it('should  display the java home prompt if the property is not set', function () {
+      var javaHomeProp = {};
+      javaHomeProp['aa'] = null;
+      c.set('javaHomePathList', javaHomeProp);
+      c.displayJavaHomePanel();
+      expect(c.get('displayJavaHomePrompt')).to.equal(true);
+    });
+  });
+
+
+    describe('#getHostOsInfo', function () {
+      it('should do ajax request', function () {
+        c.getHostOsInfo();
+        var args = testHelpers.findAjaxRequest('name', 'wizard.step3.host_info');
+        expect(args).exists;
+      });
+    });
+
+    describe('#getHostOsInfoSuccessCallback', function () {
+      it('should get the correct data', function(){
+        c.set('jsonHostData',{});
+        var data = {items: [{Hosts: {host_name: 'h1'}} ]};
+        var resolve = false;
+        var params = {
+            dfd: {
+              resolve: function() {
+                resolve = true;
+              }
+            }
+        };
+        c.getHostOsInfoSuccessCallback(data ,null, params);
+        expect(resolve).to.be.true;
+        expect(c.get('jsonHostData')).to.be.eql(data);
+      });
+    });
 
   describe('#getHostCheckTasksSuccess', function() {
 

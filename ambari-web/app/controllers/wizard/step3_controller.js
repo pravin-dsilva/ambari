@@ -184,6 +184,7 @@ App.WizardStep3Controller = Em.Controller.extend(App.ReloadPopupMixin, App.Check
     this.set('isLoaded', false);
     this.set('isSubmitDisabled', true);
     this.set('stopChecking', false);
+    this.set('displayJavaHomePrompt',false);
   },
 
   /**
@@ -301,11 +302,31 @@ App.WizardStep3Controller = Em.Controller.extend(App.ReloadPopupMixin, App.Check
     return App.showConfirmationPopup(function () {
       App.router.send('removeHosts', hosts);
       self.hosts.removeObjects(hosts);
+      hosts.forEach(function(_host) {
+        self.removeHostFromPrompt(self.javaHomeNewOs, _host.name)
+        if(!self.javaHomeNewOs.length){
+          self.set('displayJavaHomePrompt',false)
+        }
+      });
       self.stopRegistration();
       if (!self.hosts.length) {
         self.set('isSubmitDisabled', true);
       }
     }, Em.I18n.t('installer.step3.hosts.remove.popup.body'));
+  },
+
+  removeHostFromPrompt : function(osTypeList, hostName){
+    if(osTypeList){
+      for (var index=0; index < osTypeList.length; index++){
+        if (osTypeList[index].hosts.contains(hostName)) {
+          osTypeList[index].hosts.removeObject(hostName);
+          if (osTypeList[index].hosts.length == 0) {
+            osTypeList.removeAt(index);
+          }
+          break;
+        }
+      }
+    }
   },
 
   /**
@@ -372,6 +393,7 @@ App.WizardStep3Controller = Em.Controller.extend(App.ReloadPopupMixin, App.Check
    */
   retryHosts: function (hosts) {
     var self = this;
+    this.set('displayJavaHomePrompt', false);
     var bootStrapData = JSON.stringify({
         'verbose': true,
         'sshKey': this.get('content.installOptions.sshKey'),
@@ -703,11 +725,19 @@ App.WizardStep3Controller = Em.Controller.extend(App.ReloadPopupMixin, App.Check
    * @method getJDKName
    */
   getJDKName: function () {
+    var osTypeJDKHomeField = "";
+    var tmpPath;
+    this.jsonHostData.items.forEach(function (os) {
+      if(osTypeJDKHomeField.indexOf(os.Hosts.os_type) == -1) {
+        tmpPath= "RootServiceComponents/properties/java.home."+os.Hosts.os_type+",";
+        osTypeJDKHomeField = osTypeJDKHomeField.concat(tmpPath);
+      }
+    },this);
     return App.ajax.send({
       name: 'ambari.service',
       sender: this,
       data: {
-        fields : '?fields=RootServiceComponents/properties/jdk.name,RootServiceComponents/properties/java.home,RootServiceComponents/properties/jdk_location'
+        fields : '?fields='+osTypeJDKHomeField+'RootServiceComponents/properties/jdk.name,RootServiceComponents/properties/java.home,RootServiceComponents/properties/jdk_location'
       },
       success: 'getJDKNameSuccessCallback'
     });
@@ -719,9 +749,14 @@ App.WizardStep3Controller = Em.Controller.extend(App.ReloadPopupMixin, App.Check
     * @method getJDKNameSuccessCallback
     */
   getJDKNameSuccessCallback: function (data) {
+    var javaHomePathList= {};
     this.set('needJDKCheckOnHosts', !data.RootServiceComponents.properties["jdk.name"]);
     this.set('jdkLocation', Em.get(data, "RootServiceComponents.properties.jdk_location"));
     this.set('javaHome', data.RootServiceComponents.properties["java.home"]);
+    this.jsonHostData.items.forEach(function (os) {
+      javaHomePathList[os.Hosts.os_type] = data.RootServiceComponents.properties["java.home." + os.Hosts.os_type]
+    }, this);
+    this.set('javaHomePathList',javaHomePathList);
   },
 
   doCheckJDK: function () {
@@ -764,16 +799,39 @@ App.WizardStep3Controller = Em.Controller.extend(App.ReloadPopupMixin, App.Check
   },
   parseJDKCheckResults: function (data) {
     var jdkWarnings = [], hostsJDKContext = [], hostsJDKNames = [];
+    var javaHomeNewOs_tmp = Em.A([]);
+    var javaHomeNewOs = Em.A([]);
     // check if the request ended
     if (data.Requests.end_time > 0 && data.tasks) {
       data.tasks.forEach( function(task) {
         // generate warning context
         if (Em.get(task, "Tasks.structured_out.java_home_check.exit_code") == 1){
+          var warnedHost = this.jsonHostData.items.findProperty('Hosts.host_name', task.Tasks.host_name);
           var jdkContext = Em.I18n.t('installer.step3.hostWarningsPopup.jdk.context').format(task.Tasks.host_name);
           hostsJDKContext.push(jdkContext);
           hostsJDKNames.push(task.Tasks.host_name);
+          var isSet = false;
+          for(var index=0; index < javaHomeNewOs.length; index++) {
+            if(javaHomeNewOs[index].os_type.contains(warnedHost.Hosts.os_type)) {
+              javaHomeNewOs[index].hosts.push(task.Tasks.host_name);
+              javaHomeNewOs[index].host_jdk_context.push(jdkContext);
+              isSet = true;
+              break;
+            }
+          }
+          if(!isSet) {
+            javaHomeNewOs_tmp = {
+                "os_type": warnedHost.Hosts.os_type,
+                "hosts" : [],
+                "host_jdk_context" : []
+            };
+            javaHomeNewOs_tmp.hosts.push(task.Tasks.host_name);
+            javaHomeNewOs_tmp.host_jdk_context.push(jdkContext);
+            javaHomeNewOs.pushObject(javaHomeNewOs_tmp);
+          }
         }
-      });
+        this.set('javaHomeNewOs', javaHomeNewOs);
+      },this);
       if (hostsJDKContext.length > 0) { // java jdk warning exist
         var invalidJavaHome = this.get('javaHome');
         jdkWarnings.push({
@@ -783,13 +841,27 @@ App.WizardStep3Controller = Em.Controller.extend(App.ReloadPopupMixin, App.Check
           hostsNames: hostsJDKNames,
           category: 'jdk'
         });
+        this.displayJavaHomePanel(); //if the java home property is not set, provide a prompt for user to set it
       }
       this.set('jdkCategoryWarnings', jdkWarnings);
-    } else {
+    }
+    else{
       // still doing JDK check, data not ready to be parsed
       this.set('jdkCategoryWarnings', null);
     }
     this.doCheckJDKsuccessCallback();
+  },
+
+  displayJavaHomePanel: function() {
+    for (var index = this.javaHomeNewOs.length -1 ; index >= 0 ; index--) {
+      var os = this.javaHomeNewOs[index].os_type;
+      if(this.javaHomePathList[os]){
+        this.javaHomeNewOs.removeAt(index);
+      }
+    }
+    if(this.javaHomeNewOs.length) {
+      this.set('displayJavaHomePrompt', true);
+    }
   },
 
   /**
@@ -815,10 +887,38 @@ App.WizardStep3Controller = Em.Controller.extend(App.ReloadPopupMixin, App.Check
     if (!hosts.everyProperty('bootStatus', 'FAILED')) {
       this.set('isWarningsLoaded', false);
       this.getHostNameResolution();
-      this.checkHostJDK();
+      var self = this;
+      this.getHostOsInfo().done(function() {
+        self.checkHostJDK();
+      },self);
     } else {
       this.stopHostCheck();
     }
+  },
+
+  getHostOsInfo : function() {
+    this.set('isHostsWarningsLoaded', false);
+    var dfd = $.Deferred();
+    App.ajax.send({
+      name : 'wizard.step3.host_info',
+      sender : this,
+      data : {
+        dfd : dfd
+      },
+      success : 'getHostOsInfoSuccessCallback',
+      error : 'getHostOsInfoErrorCallback'
+    });
+    return dfd.promise();
+  },
+
+  getHostOsInfoSuccessCallback : function(data, opt, params) {
+    this.jsonHostData = data;
+    params.dfd.resolve();
+  },
+
+  getHostOsInfoErrorCallback : function(request, ajaxOptions, error, opt, params) {
+    console.log("Error in getting host info");
+    params.dfd.reject();
   },
 
   _submitProceed: function () {
