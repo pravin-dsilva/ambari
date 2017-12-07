@@ -492,8 +492,10 @@ class JDKSetup(object):
         err = "Java home path or java binary file is unavailable. Please put correct path to java home."
         raise FatalException(1, err)
       print "Validating JDK on Ambari Server...done."
-
+      
+      server_os_type = OS_TYPE + OS_VERSION
       properties.process_pair(JAVA_HOME_PROPERTY, args.java_home)
+      properties.process_pair(JAVA_HOME_PROPERTY + "." +server_os_type, args.java_home)
       properties.removeOldProp(JDK_NAME_PROPERTY)
       properties.removeOldProp(JCE_NAME_PROPERTY)
 
