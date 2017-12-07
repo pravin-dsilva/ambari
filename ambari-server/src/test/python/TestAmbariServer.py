@@ -2876,6 +2876,7 @@ class TestAmbariServer(TestCase):
     read_ambari_user_mock.return_value = "ambari"
     get_ambari_properties_mock.return_value = p
     check_ambari_java_version_is_valid_mock.return_value = True
+    get_validated_string_input_mock.return_value = "suse11"
     # Test case: ambari.properties not found
     try:
       download_and_install_jdk(args)
@@ -2901,6 +2902,7 @@ class TestAmbariServer(TestCase):
     validate_jdk_mock.return_value = True
     path_existsMock.return_value = False
     get_JAVA_HOME_mock.return_value = None
+    get_validated_string_input_mock.return_value = 'suse11'
     rcode = download_and_install_jdk(args)
     self.assertEqual(0, rcode)
     self.assertTrue(update_properties_mock.called)
@@ -2919,6 +2921,7 @@ class TestAmbariServer(TestCase):
 
     # Test case: JDK file does not exist, HTTP response does not
     # contain Content-Length
+    args.java_home = None
     p.process_pair("jdk1.url", jdk1_url)
     validate_jdk_mock.return_value = False
     path_existsMock.return_value = False
@@ -2978,6 +2981,19 @@ class TestAmbariServer(TestCase):
     get_JAVA_HOME_mock.return_value = "some_jdk"
     path_isfileMock.return_value = True
     download_and_install_jdk(args)
+    self.assertTrue(update_properties_mock.call_count == 1)
+
+    # Test case: Test property is saved along as java.home.<os_type>
+    update_properties_mock.reset_mock()
+    args.java_home = "somewhere"
+    validate_jdk_mock.return_value = True
+    path_existsMock.reset_mock()
+    path_existsMock.side_effect = pem_side_effect1
+    get_JAVA_HOME_mock.return_value = "some_jdk"
+    path_isfileMock.return_value = True
+    get_validated_string_input_mock.return_value= "abc"
+    download_and_install_jdk(args)
+    self.assertTrue(1, get_validated_string_input_mock.call_count)
     self.assertTrue(update_properties_mock.call_count == 1)
 
     # Test case: Negative test case JAVA_HOME location should not be updated if -j option is supplied and
