@@ -2876,6 +2876,7 @@ class TestAmbariServer(TestCase):
     read_ambari_user_mock.return_value = "ambari"
     get_ambari_properties_mock.return_value = p
     check_ambari_java_version_is_valid_mock.return_value = True
+    get_validated_string_input_mock.return_value = "suse11"
     # Test case: ambari.properties not found
     try:
       download_and_install_jdk(args)
@@ -2923,7 +2924,7 @@ class TestAmbariServer(TestCase):
     validate_jdk_mock.return_value = False
     path_existsMock.return_value = False
     get_YN_input_mock.return_value = True
-    get_validated_string_input_mock.return_value = "1"
+    get_validated_string_input_mock.return_value = "suse11"
     run_os_command_mock.return_value = (0, "Wrong out", None)
     try:
       download_and_install_jdk(args)
@@ -2943,6 +2944,7 @@ class TestAmbariServer(TestCase):
     statResult = MagicMock()
     statResult.st_size = 32000
     statMock.return_value = statResult
+    get_validated_string_input_mock.return_value = "1"
     try:
       rcode = download_and_install_jdk(args)
     except Exception, e:
@@ -3012,7 +3014,7 @@ class TestAmbariServer(TestCase):
     validate_jdk_mock.return_value = False
     path_existsMock.reset_mock()
     path_existsMock.side_effect = pem_side_effect1
-    get_validated_string_input_mock.return_value = "2"
+    get_validated_string_input_mock.return_value = "suse11"
     get_JAVA_HOME_mock.return_value = None
     try:
       download_and_install_jdk(args)
@@ -3045,6 +3047,7 @@ class TestAmbariServer(TestCase):
     validate_jdk_mock.return_value = False
     path_existsMock.reset_mock()
     path_existsMock.side_effect = pem_side_effect1
+    get_validated_string_input_mock.return_value = "suse11"
     try:
       download_and_install_jdk(args)
       self.fail("Should throw exception")
