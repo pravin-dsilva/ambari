@@ -410,23 +410,25 @@ class JDKSetup(object):
   #
   # Downloads and installs the JDK and the JCE policy archive
   #
-  def download_and_install_jdk(self, args, properties, ambariOnly = False):
+  def download_and_install_jdk(self, args, properties, os_type, ambariOnly = False):
     conf_file = properties.fileName
 
     jcePolicyWarn = "JCE Policy files are required for configuring Kerberos security. If you plan to use Kerberos," \
                     "please make sure JCE Unlimited Strength Jurisdiction Policy Files are valid on all hosts."
-
+    server_os_type = OS_TYPE + OS_VERSION
     if args.java_home:
       #java_home was specified among the command-line arguments. Use it as custom JDK location.
-      if not validate_jdk(args.java_home):
+      if not validate_jdk(args.java_home) and  server_os_type == os_type:
         err = "Path to java home " + args.java_home + " or java binary file does not exists"
         raise FatalException(1, err)
 
-      print_warning_msg("JAVA_HOME " + args.java_home + " must be valid on ALL hosts")
+      print_warning_msg("JAVA_HOME " + args.java_home + " must be valid on all hosts for selected OS type")
       print_warning_msg(jcePolicyWarn)
       IS_CUSTOM_JDK = True
 
-      properties.process_pair(JAVA_HOME_PROPERTY, args.java_home)
+      properties.process_pair(JAVA_HOME_PROPERTY + '.' + os_type, args.java_home)
+      if(server_os_type == os_type):
+        properties.process_pair(JAVA_HOME_PROPERTY, args.java_home)
       properties.removeOldProp(JDK_NAME_PROPERTY)
       properties.removeOldProp(JCE_NAME_PROPERTY)
 
@@ -493,6 +495,7 @@ class JDKSetup(object):
       print "Validating JDK on Ambari Server...done."
 
       properties.process_pair(JAVA_HOME_PROPERTY, args.java_home)
+      properties.process_pair(JAVA_HOME_PROPERTY + "." +server_os_type, args.java_home)
       properties.removeOldProp(JDK_NAME_PROPERTY)
       properties.removeOldProp(JCE_NAME_PROPERTY)
 
@@ -863,21 +866,32 @@ def download_and_install_jdk(options):
     err = "Error getting ambari properties"
     raise FatalException(-1, err)
 
+  server_os_type = OS_TYPE + OS_VERSION
+  if options.java_home:
+    choice_prompt = "Enter OS type for which the Java Home path is to be changed(eg: redhat7, redhat-ppc7, suse11, ubuntu12): "
+    java_home_os_type = get_validated_string_input(choice_prompt, None, None, None, False)
+    if java_home_os_type  is None:
+      err = 'OS type cannot be empty'
+      raise FatalException(1, err)
+  else:
+    java_home_os_type = server_os_type
+
   jdkSetup = JDKSetup()
-  jdkSetup.download_and_install_jdk(options, properties)
+  jdkSetup.download_and_install_jdk(options, properties, java_home_os_type)
 
   if jdkSetup.jdk_index != jdkSetup.custom_jdk_number:
     jdkSetup.download_and_unpack_jce_policy(properties)
 
   update_properties(properties)
 
-  ambari_java_version_valid = check_ambari_java_version_is_valid(get_JAVA_HOME(), jdkSetup.JAVA_BIN, 8, properties)
-  if not ambari_java_version_valid:
-    jdkSetup = JDKSetup() # recreate object
-    jdkSetup.download_and_install_jdk(options, properties, True)
-    if jdkSetup.jdk_index != jdkSetup.custom_jdk_number:
-      jdkSetup.download_and_unpack_jce_policy(properties, True)
-    update_properties(properties)
+  if(java_home_os_type == server_os_type):
+    ambari_java_version_valid = check_ambari_java_version_is_valid(get_JAVA_HOME(), jdkSetup.JAVA_BIN, 8, properties)
+    if not ambari_java_version_valid:
+      jdkSetup = JDKSetup() # recreate object
+      jdkSetup.download_and_install_jdk(options, properties, java_home_os_type, True)
+      if jdkSetup.jdk_index != jdkSetup.custom_jdk_number:
+        jdkSetup.download_and_unpack_jce_policy(properties, True)
+      update_properties(properties)
 
   return 0
 
