@@ -140,6 +140,49 @@
             {{/unless}}
           </div>
         {{/unless}}
+        {{#if displayJavaHomePrompt}}
+           <div class="java-home-panel">
+            <div class="step-title">
+             <p>{{t installer.step3.javaHome.title}}</p>
+            </div>
+            <div class="step-description">
+              <label>{{t installer.step3.javaHome.description}}</label>
+            </div>
+            <div {{bindAttr class=":alert :alert-warning "}} {{QAAttr "java-error-notify"}}>{{view.javaHomeSetError}}</div>
+            <table class="table table-hover">
+             <thead>
+              <tr>
+               <th class="col-sm-2">{{t installer.step3.javaHome.osType}}</th>
+               <th class="col-sm-3">{{t installer.step3.javaHome.name}}</th>
+              </tr>
+             </thead>
+             <tbody>
+              {{#each javaHome in controller.javaHomeNewOs}}
+              <tr>
+               <td class="col-sm-2">{{javaHome.os_type}}</td>
+               <td class="col-sm-9" colspan="2">
+                <table class="table table-condensed no-borders inner-table">
+                 <tbody>
+                  <tr>
+                   <td {{bindAttr class="javaHome.invalidFormatError:onerror :col-sm-3"}}>{{view Ember.TextField valueBinding="javaHome.value" }}</td>
+                  </tr>
+                  <tr>
+                   <td class="col-sm-3">{{#if javaHome.invalidFormatError}}
+                    <p class="help-block validation-block col-sm-9"{{QAAttr "java-path-validation"}}>{{javaHome.validation}}</p> {{/if}}
+                   </td>
+                  </tr>
+                 </tbody>
+                </table>
+               </td>
+              </tr>
+              {{/each}}
+             </tbody>
+            </table>
+            <div class="btn-area">
+             <button type="button" class="btn" {{bindAttr disabled="isJavaHomeSubmitDisabled" }} {{action submitJavaHome target="controller"}}>Validate Java Home</button>
+            </div>
+           </div>
+           {{/if}}
       </div>
     </div>
   </div>
