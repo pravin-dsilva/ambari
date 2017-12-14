@@ -75,6 +75,12 @@ App.WizardStep3View = App.TableView.extend({
   pageChecked: false,
 
   /**
+   * Message when java home property does not exist
+   * @type {string}
+   */
+  javaHomeSetError: Em.I18n.t('installer.step3.javaHome.property.error'),
+
+  /**
    * bootStatus category object
    * @type {Ember.Object}
    */
