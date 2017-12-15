@@ -2886,6 +2886,7 @@ class TestAmbariServer(TestCase):
       pass
 
     # Test case: JDK already exists
+    args.os_type= None
     args.java_home = None
     args.jdk_location = None
     get_JAVA_HOME_mock.return_value = "some_jdk"
@@ -2972,6 +2973,18 @@ class TestAmbariServer(TestCase):
     # Test case: Update JAVA_HOME location using command: ambari-server setup -j %NEW_LOCATION%
     update_properties_mock.reset_mock()
     args.java_home = "somewhere"
+    validate_jdk_mock.return_value = True
+    path_existsMock.reset_mock()
+    path_existsMock.side_effect = pem_side_effect1
+    get_JAVA_HOME_mock.return_value = "some_jdk"
+    path_isfileMock.return_value = True
+    download_and_install_jdk(args)
+    self.assertTrue(update_properties_mock.call_count == 1)
+
+    # Test case: Update JAVA_HOME using --os-type option
+    update_properties_mock.reset_mock()
+    args.java_home = "somewhere"
+    args.os_type= "suse11"
     validate_jdk_mock.return_value = True
     path_existsMock.reset_mock()
     path_existsMock.side_effect = pem_side_effect1
